@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       model: "claude-sonnet-4-6",
       max_tokens: 2048,
       system: SYSTEM_PROMPT,
-      tools: [{ type: "web_search_20250305", name: "web_search" }] as Anthropic.Tool[],
+      tools: [{ type: "web_search_20250305", name: "web_search" }] as unknown as Anthropic.Tool[],
       messages: messages as Anthropic.MessageParam[],
     });
 
