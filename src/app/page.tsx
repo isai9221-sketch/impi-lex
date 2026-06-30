@@ -3,9 +3,19 @@ import { useState, useRef, useEffect } from "react";
 import { QUICK_PROMPTS, OFFICIAL_RESOURCES } from "@/lib/agent";
 import styles from "./page.module.css";
 
+interface Attachment {
+  name: string;
+  data: string; // base64
+  mediaType: "image/jpeg" | "image/png" | "application/pdf";
+  previewUrl: string;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
+  // Stored content blocks (including base64) for API history
+  blocks?: Array<Record<string, unknown>>;
+  attachment?: { name: string; previewUrl: string };
 }
 
 function renderMarkdown(text: string): string {
@@ -34,8 +44,10 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -55,20 +67,46 @@ export default function Home() {
 
   async function sendMessage(text?: string) {
     const query = (text ?? input).trim();
-    if (!query || loading) return;
+    if ((!query && !attachment) || loading) return;
 
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    const newMessages: Message[] = [...messages, { role: "user", content: query }];
+    // Build content blocks for the API when there's an attachment
+    let blocks: Array<Record<string, unknown>> | undefined;
+    if (attachment) {
+      const fileBlock = attachment.mediaType === "application/pdf"
+        ? { type: "document", source: { type: "base64", media_type: attachment.mediaType, data: attachment.data } }
+        : { type: "image", source: { type: "base64", media_type: attachment.mediaType, data: attachment.data } };
+      blocks = query
+        ? [fileBlock, { type: "text", text: query }]
+        : [fileBlock];
+    }
+
+    const userMsg: Message = {
+      role: "user",
+      content: query,
+      blocks,
+      attachment: attachment ? { name: attachment.name, previewUrl: attachment.previewUrl } : undefined,
+    };
+
+    setAttachment(null);
+
+    const newMessages: Message[] = [...messages, userMsg];
     setMessages(newMessages);
     setLoading(true);
 
     try {
+      // Build API messages: use blocks for messages that have them, string otherwise
+      const apiMessages = newMessages.map((m) => ({
+        role: m.role,
+        content: m.blocks ?? m.content,
+      }));
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({ messages: apiMessages }),
       });
       const data = await res.json();
       const reply = data.content ?? data.error ?? "Error desconocido.";
@@ -78,6 +116,28 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    const validTypes = ["image/jpeg", "image/png", "application/pdf"];
+    if (!validTypes.includes(file.type)) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(",")[1];
+      setAttachment({
+        name: file.name,
+        data: base64,
+        mediaType: file.type as Attachment["mediaType"],
+        previewUrl: file.type.startsWith("image/") ? result : "",
+      });
+    };
+    reader.readAsDataURL(file);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -192,14 +252,24 @@ export default function Home() {
                 <div className={`${styles.avatar} ${msg.role === "user" ? styles.avatarUser : styles.avatarAgent}`}>
                   {msg.role === "user" ? "TÚ" : "Ⅼ"}
                 </div>
-                <div
-                  className={`${styles.bubble} ${msg.role === "user" ? styles.bubbleUser : styles.bubbleAgent}`}
-                  dangerouslySetInnerHTML={{
-                    __html: msg.role === "user"
-                      ? msg.content.replace(/\n/g, "<br />")
-                      : renderMarkdown(msg.content),
-                  }}
-                />
+                <div className={`${styles.bubble} ${msg.role === "user" ? styles.bubbleUser : styles.bubbleAgent}`}>
+                  {msg.attachment && (
+                    <div className={styles.msgAttachment}>
+                      {msg.attachment.previewUrl ? (
+                        <img src={msg.attachment.previewUrl} alt={msg.attachment.name} className={styles.msgThumb} />
+                      ) : (
+                        <span className={styles.msgPdfTag}>📄 {msg.attachment.name}</span>
+                      )}
+                    </div>
+                  )}
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html: msg.role === "user"
+                        ? msg.content.replace(/\n/g, "<br />")
+                        : renderMarkdown(msg.content),
+                    }}
+                  />
+                </div>
               </div>
             ))}
 
@@ -218,7 +288,33 @@ export default function Home() {
 
           {/* INPUT */}
           <div className={styles.inputArea}>
+            {/* Attachment preview */}
+            {attachment && (
+              <div className={styles.attachPreview}>
+                {attachment.previewUrl ? (
+                  <img src={attachment.previewUrl} alt={attachment.name} className={styles.attachThumb} />
+                ) : (
+                  <div className={styles.attachPdf}>📄 {attachment.name}</div>
+                )}
+                <button className={styles.removeAttach} onClick={() => setAttachment(null)} title="Quitar archivo">✕</button>
+              </div>
+            )}
             <div className={styles.inputWrapper}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.pdf"
+                onChange={handleFileChange}
+                style={{ display: "none" }}
+              />
+              <button
+                className={styles.clipBtn}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                title="Adjuntar imagen o PDF"
+              >
+                📎
+              </button>
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -232,12 +328,12 @@ export default function Home() {
               <button
                 className={styles.sendBtn}
                 onClick={() => sendMessage()}
-                disabled={loading || !input.trim()}
+                disabled={loading || (!input.trim() && !attachment)}
               >
                 ➤
               </button>
             </div>
-            <p className={styles.hint}>Enter para enviar · Shift+Enter para nueva línea · El historial se guarda automáticamente</p>
+            <p className={styles.hint}>Enter para enviar · Shift+Enter para nueva línea · 📎 Adjunta imágenes JPG/PNG o PDFs</p>
           </div>
         </div>
       </div>

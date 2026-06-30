@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       max_tokens: 2048,
       system: SYSTEM_PROMPT,
       tools: [{ type: "web_search_20250305", name: "web_search" }] as Anthropic.Tool[],
-      messages,
+      messages: messages as Anthropic.MessageParam[],
     });
 
     // web_search_20250305 es server-side: el API ejecuta la búsqueda internamente.
