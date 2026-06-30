@@ -16,13 +16,18 @@ export async function POST(req: NextRequest) {
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 1500,
+      max_tokens: 2048,
       system: SYSTEM_PROMPT,
+      tools: [{ type: "web_search_20250305", name: "web_search" }] as Anthropic.Tool[],
       messages,
     });
 
+    // web_search_20250305 es server-side: el API ejecuta la búsqueda internamente.
+    // La respuesta puede incluir bloques de tipo text, web_search_tool_use y
+    // web_search_tool_result. Solo necesitamos los bloques de texto final.
     const content = response.content
-      .map((block) => (block.type === "text" ? block.text : ""))
+      .filter((block) => block.type === "text")
+      .map((block) => (block as Anthropic.TextBlock).text)
       .join("");
 
     return NextResponse.json({ content });
