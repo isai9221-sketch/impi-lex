@@ -189,6 +189,30 @@ export default function Home() {
     }
   }
 
+  async function exportToWord(content: string, msgIndex: number) {
+    // Derive title from the previous user message or first line
+    const prevUser = [...messages].slice(0, msgIndex).reverse().find(m => m.role === "user");
+    const title = prevUser?.content?.slice(0, 80) || "Informe IMPI Lex";
+
+    try {
+      const res = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, title }),
+      });
+      if (!res.ok) throw new Error("Error al generar");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `impi-lex-${Date.now()}.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Error al generar el documento Word. Intenta de nuevo.");
+    }
+  }
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -374,20 +398,31 @@ export default function Home() {
                 <div className={`${styles.avatar} ${msg.role === "user" ? styles.avatarUser : styles.avatarAgent}`}>
                   {msg.role === "user" ? "TÚ" : "Ⅼ"}
                 </div>
-                <div className={`${styles.bubble} ${msg.role === "user" ? styles.bubbleUser : styles.bubbleAgent}`}>
-                  {msg.attachment && (
-                    <div className={styles.msgAttachment}>
-                      {msg.attachment.previewUrl
-                        ? <img src={msg.attachment.previewUrl} alt={msg.attachment.name} className={styles.msgThumb} />
-                        : <span className={styles.msgPdfTag}>📄 {msg.attachment.name}</span>
-                      }
-                    </div>
+                <div className={styles.msgCol}>
+                  <div className={`${styles.bubble} ${msg.role === "user" ? styles.bubbleUser : styles.bubbleAgent}`}>
+                    {msg.attachment && (
+                      <div className={styles.msgAttachment}>
+                        {msg.attachment.previewUrl
+                          ? <img src={msg.attachment.previewUrl} alt={msg.attachment.name} className={styles.msgThumb} />
+                          : <span className={styles.msgPdfTag}>📄 {msg.attachment.name}</span>
+                        }
+                      </div>
+                    )}
+                    <div dangerouslySetInnerHTML={{
+                      __html: msg.role === "user"
+                        ? msg.content.replace(/\n/g, "<br />")
+                        : renderMarkdown(msg.content),
+                    }} />
+                  </div>
+                  {msg.role === "assistant" && msg.content && (
+                    <button
+                      className={styles.exportBtn}
+                      onClick={() => exportToWord(msg.content, i)}
+                      title="Exportar esta respuesta a Word"
+                    >
+                      📄 Exportar a Word
+                    </button>
                   )}
-                  <div dangerouslySetInnerHTML={{
-                    __html: msg.role === "user"
-                      ? msg.content.replace(/\n/g, "<br />")
-                      : renderMarkdown(msg.content),
-                  }} />
                 </div>
               </div>
             ))}

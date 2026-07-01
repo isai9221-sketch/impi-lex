@@ -586,6 +586,40 @@
   text-align: center;
 }
 
+/* Message column (bubble + export button) */
+.msgCol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 640px;
+}
+.msgUser .msgCol { align-items: flex-end; }
+
+.exportBtn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.exportBtn:hover {
+  border-color: var(--navy);
+  color: var(--navy);
+  background: var(--bg-secondary);
+}
+.dark .exportBtn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
 /* Attachment in chat */
 .msgAttachment { margin-bottom: 8px; }
 .msgThumb {
